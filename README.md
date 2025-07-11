@@ -5,14 +5,44 @@ A DLL that hooks and bypasses the license verification in ParkControl (a CPU cor
 This project contains a source code for a DLL that uses MinHook to intercept and modify the license verification function in ParkControl.exe. The hook forces the function to always return success (1), effectively bypassing the license check.
 
 ## Technical Details
-The DLL targets the following function in ParkControl.exe:
+The DLL hooks the license handling function in `ParkControl.exe` like this:
 
 ```cpp
-__int64 __fastcall sub_140004B80(__int64 a1, __int64 a2, char a3, _QWORD *a4)
-{
-    // Complex license verification logic
-    // ...
-    return verification_result;
+uint8_t __fastcall hooked_process_license(int64_t request_context, int64_t license_key, char is_activation, int64_t* output_license) {
+    std::ostringstream oss;
+    oss << "hooked_process_license: Called with license_key=0x" << std::hex << license_key;
+    debug_log(oss.str());
+
+    uint8_t v5 = 1; // Force success return value
+
+    int64_t v18 = sub_140002E90();
+    if (!v18) {
+        sub_140003470(2147500037i64);
+        return 0;
+    }
+
+    if (output_license) {
+        try {
+            int64_t* v33 = (int64_t*)((*(int64_t(__fastcall**)(int64_t))(*(uint64_t*)v18 + 24i64))(v18) + 24);
+            *output_license = (int64_t)(v33 + 6);
+        }
+        catch (...) {
+            return 0;
+        }
+    }
+
+    if (request_context) {
+        try {
+            *(DWORD*)(request_context + 24) = 1;
+            *(BYTE*)(request_context + 48) = 0;
+        }
+        catch (...) {
+            return 0;
+        }
+    }
+
+    // v5 = 1, we are returning a successfull ceck
+    return v5;
 }
 ```
 
@@ -359,16 +389,23 @@ LABEL_26:
 
 ```cpp
 namespace {
-    const uint8_t k_pattern[] = { 0x48, 0x89, 0x5C, 0x24, 0x20, 0x44 };
-    const uint8_t k_mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }; // No wildcards
-    const size_t k_pattern_size = sizeof(k_pattern);
+    // Signature for sub_140004B80 (main function)
+    // You can find this via the tutorial above, the tutorial also works for signatures below
+    const uint8_t k_process_license_pattern[] = { 0x48, 0x89, 0x5C, 0x24, 0x20, 0x44 };
+    const uint8_t k_process_license_mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+    const size_t k_process_license_pattern_size = sizeof(k_process_license_pattern);
 
-    // Function pointer type for sub_140004B80 (process_license)
-    using process_license_t = uint8_t(*)(int64_t request_context,
-        int64_t license_key,
-        char is_activation,
-        int64_t* output_license);
-    process_license_t original_process_license = nullptr;
+    // Signature for sub_140002E90
+    // Inside the original function you found, look for this sub and generate a signature for it
+    const uint8_t k_sub_140002E90_pattern[] = { 0x40, 0x53, 0x48, 0x83, 0xEC, 0x20, 0x65 };
+    const uint8_t k_sub_140002E90_mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+    const size_t k_sub_140002E90_pattern_size = sizeof(k_sub_140002E90_pattern);
+
+    // Signature for sub_140003470
+    // Same goes here, just locate this stub and generate a signature for it too
+    const uint8_t k_sub_140003470_pattern[] = { 0x48, 0x83, 0xEC, 0x28, 0x8B, 0xD1 };
+    const uint8_t k_sub_140003470_mask[] = { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF };
+    const size_t k_sub_140003470_pattern_size = sizeof(k_sub_140003470_pattern);
 }
 ```
 
