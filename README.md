@@ -353,7 +353,7 @@ LABEL_26:
 2. Load in `ParkControl.exe`.
 3. Press `ALT+T`.
 4. In the search box, enter: `%s%s&item_id=%d&license=%s` and find our function.
-5. Use SigMakerEx plugin to generate the pattern for the function.
+5. Use `SigMakerEx` plugin to generate the pattern for the function.
 6. Convert it from IDA style to code style.
 7. Adjust the mask of the signature.
 
