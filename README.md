@@ -17,6 +17,144 @@ __int64 __fastcall sub_140004B80(__int64 a1, __int64 a2, char a3, _QWORD *a4)
 ```
 
 <details>
+<summary>View human readable function</summary>
+
+```cpp
+// License verification/activation function
+// Parameters:
+//   a1 - Request context object
+//   a2 - License key string
+//   a3 - Activation flag (0 = check, 1 = activate)
+//   a4 - Output license info
+// Returns: Verification status (1 = success, 0 = failure)
+int64_t process_license_request(int64_t request_context, 
+                               int64_t license_key, 
+                               bool is_activation, 
+                               uint64_t* output_license) 
+{
+    uint8_t status = 0; // Default to failure
+    __m128i* current_item = (__m128i*)&license_items_table;
+    
+    // Initialize local variables
+    void* item_block[2] = {0};
+    void* block_end = 0;
+    
+    // Process each item in the license items table
+    do {
+        __m128i item_data = *current_item;
+        int item_id = _mm_cvtsi128_si32(item_data);
+        uint64_t item_value = _mm_srli_si128(item_data, 8).m128i_u64[0];
+        
+        // Get string manager instance
+        auto string_mgr = get_string_manager();
+        if (!string_mgr) {
+            throw_error(2147500037);
+        }
+        
+        // Process the item value (either string or numeric)
+        if (item_value - 1 > 0xFFFE) { // String handling
+            if (item_value) {
+                // Calculate string length
+                size_t len = 0;
+                while (((wchar_t*)(item_value))[len]) len++;
+                process_string_value(&string_mgr, item_value, len);
+            }
+        } else { // Numeric handling
+            process_numeric_value(&string_mgr, (uint16_t)item_value);
+        }
+        
+        // Add item to processing block
+        if (item_block[1] == block_end) {
+            resize_item_block(&item_block, &item_id);
+        } else {
+            *(int*)item_block[1] = item_id;
+            item_block[1] = (char*)item_block[1] + 16;
+        }
+        
+        // Clean up string manager reference
+        release_string_manager(string_mgr);
+        
+        current_item++;
+    } while (current_item != (__m128i*)license_items_table_end);
+
+    // Process the collected license items
+    int* current_block = (int*)item_block[0];
+    int* block_end_ptr = (int*)item_block[1];
+    
+    if (current_block != block_end_ptr) {
+        while (true) {
+            int item_id = *current_block;
+            auto license_data = get_license_data(*(current_block + 1));
+            
+            // Prepare activation/check request
+            const wchar_t* action = is_activation 
+                ? L"edd_action=activate_license" 
+                : L"edd_action=check_license";
+            
+            // Format request URL
+            wchar_t* request_url = format_request_url(
+                L"%s%s&item_id=%d&license=%s",
+                L"https://activate.bitsum.com/?",
+                action,
+                item_id,
+                license_key
+            );
+            
+            // Set up request context
+            *(uint8_t*)(request_context + 48) = 0;
+            prepare_request(request_context, request_url);
+            
+            // Execute request and check response
+            int response_status = *(int*)(request_context + 24);
+            
+            if (response_status == 1) { // Success
+                if (license_data != (*output_license - 24)) {
+                    if (is_valid_license_match(license_data, *output_license - 24)) {
+                        *output_license = get_license_value(license_data) + 24;
+                        status = 1; // Success
+                    } else {
+                        update_output_license(output_license, license_data + 6);
+                    }
+                }
+                break;
+            }
+            else if (response_status == 13) { // Error
+                status = 0; // Failure
+                break;
+            }
+            
+            // Clean up and move to next item
+            release_request_data(request_url);
+            release_license_data(license_data);
+            
+            current_block += 4;
+            if (current_block == block_end_ptr) {
+                break;
+            }
+        }
+    }
+    
+    // Clean up item block
+    if (item_block[0]) {
+        // Release all items in block
+        for (auto item = item_block[0]; item != item_block[1]; item += 16) {
+            release_license_data(*(item + 1) - 24);
+        }
+        
+        // Free memory
+        if (is_heap_block(item_block[0])) {
+            free(*(item_block[0] - 1));
+        } else {
+            free(item_block[0]);
+        }
+    }
+    
+    return status;
+}
+```
+</details>
+
+<details>
 <summary>View original function</summary>
 
 ```cpp
