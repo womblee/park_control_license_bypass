@@ -41,7 +41,7 @@ uint8_t __fastcall hooked_process_license(int64_t request_context, int64_t licen
         }
     }
 
-    // v5 = 1, we are returning a successfull ceck
+    // v5 = 1, we are returning a successfull check
     return v5;
 }
 ```
