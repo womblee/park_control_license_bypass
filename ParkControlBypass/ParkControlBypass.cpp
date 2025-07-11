@@ -27,6 +27,11 @@ namespace {
         char is_activation,
         int64_t* output_license);
     process_license_t original_process_license = nullptr;
+
+    // Global variables for thread management
+    HANDLE g_main_thread = nullptr;
+    HMODULE g_hmodule = nullptr;
+    volatile bool g_running = true;
 }
 
 // Hooked version of process_license
@@ -114,21 +119,56 @@ void cleanup_hook() {
     MH_Uninitialize();
 }
 
+DWORD WINAPI main_thread(LPVOID) {
+    // Initialize the hook
+    if (!initialize_hook()) {
+        FreeLibraryAndExitThread(g_hmodule, 1);
+        return 1;
+    }
+
+    // Keep the DLL running until END key is pressed
+    while (g_running) {
+        if (GetAsyncKeyState(VK_END) & 0x8000) {
+            g_running = false;
+        }
+        Sleep(75); // Small delay to avoid high CPU usage
+    }
+
+    // Cleanup hooks before unloading
+    cleanup_hook();
+
+    // Unload the DLL
+    FreeLibraryAndExitThread(g_hmodule, 0);
+    return 0;
+}
+
 BOOL APIENTRY DllMain(HMODULE module,
     DWORD reason_for_call,
     LPVOID reserved)
 {
     switch (reason_for_call) {
     case DLL_PROCESS_ATTACH:
-        if (!initialize_hook()) {
+        g_hmodule = module;
+        DisableThreadLibraryCalls(module);
+
+        // Create main thread to keep DLL running
+        g_main_thread = CreateThread(nullptr, 0, main_thread, nullptr, 0, nullptr);
+        if (!g_main_thread) {
             return FALSE;
         }
-        break;
 
+        break;
     case DLL_PROCESS_DETACH:
-        cleanup_hook();
-        break;
+        // Signal the main thread to exit
+        g_running = false;
 
+        // Wait for the main thread to finish
+        if (g_main_thread) {
+            WaitForSingleObject(g_main_thread, 1000);
+            CloseHandle(g_main_thread);
+        }
+
+        break;
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
         break;
