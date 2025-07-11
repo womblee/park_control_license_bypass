@@ -378,14 +378,15 @@ LABEL_26:
 ```
 </details>
 
-# Finding the signature
+# Updating the signatures
 1. Launch IDA 64bit.
 2. Load in `ParkControl.exe`.
 3. Press `ALT+T`.
 4. In the search box, enter: `%s%s&item_id=%d&license=%s` and find our function.
-5. Use `SigMakerEx` plugin to generate the pattern for the function.
-6. Convert it from IDA style to code style.
-7. Adjust the mask of the signature.
+5. Use `SigMakerEx` plugin to generate the pattern for the main function.
+6. Do the same for the other 2 subs, just look at the disassembly and use the plugin on them too.
+7. Convert the signatures from IDA style to code style.
+8. Adjust the masks of the signatures.
 
 ```cpp
 namespace {
